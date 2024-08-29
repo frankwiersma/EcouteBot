@@ -1,0 +1,15 @@
+# Exclude the virtual environment directory
+venv/
+
+# Exclude environment variables file
+.env
+
+# Python cache files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Byte-compiled / optimized / DLL files
+*.pyd
+*.pyo
+*.pyc
