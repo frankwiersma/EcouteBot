@@ -16,12 +16,15 @@ LANGUAGES = {
     "nl": "Dutch 🇳🇱 "
 }
 
+# Default language
+DEFAULT_LANGUAGE = "nl"
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
     if str(update.effective_user.id) != config.ALLOWED_USER_ID:
         await update.message.reply_text("Sorry, you are not authorized to use this bot.")
         return
-    
+
     user = update.effective_user
     await update.message.reply_html(
         f"Hi {user.mention_html()}! I can transcribe voice messages. Send me a voice message or audio file to get started."
@@ -32,7 +35,7 @@ async def show_language_options(update: Update, context: ContextTypes.DEFAULT_TY
     """Show language selection options."""
     if str(update.effective_user.id) != config.ALLOWED_USER_ID:
         return
-    
+
     keyboard = [
         [InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}") 
          for lang_code, lang_name in list(LANGUAGES.items())[:5]],
@@ -47,7 +50,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if str(update.effective_user.id) != config.ALLOWED_USER_ID:
         await update.callback_query.answer("You are not authorized to use this bot.")
         return
-    
+
     query = update.callback_query
     await query.answer()
 
@@ -61,10 +64,10 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if str(update.effective_user.id) != config.ALLOWED_USER_ID:
         await update.message.reply_text("Sorry, you are not authorized to use this bot.")
         return
-    
+
     if "language" not in context.user_data:
-        await update.message.reply_text("Please select a language first using the /start command.")
-        return
+        context.user_data["language"] = DEFAULT_LANGUAGE
+        await update.message.reply_text(f"Using default language: {LANGUAGES[DEFAULT_LANGUAGE]}. You can change it using the /start command.")
 
     file = None
     mime_type = None
