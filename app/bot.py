@@ -1,8 +1,8 @@
 import logging
-import httpx
+import aiohttp
+import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from deepgram import Deepgram
 import config
 import io
 
@@ -10,21 +10,10 @@ import io
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# Initialize Deepgram client
-deepgram = Deepgram(config.DEEPGRAM_API_KEY)
-
 # Language options
 LANGUAGES = {
-    "en": "English 🇬🇧",
-    "es": "Spanish 🇪🇸",
-    "fr": "French 🇫🇷",
-    "de": "German 🇩🇪",
-    "it": "Italian 🇮🇹",
-    "pt": "Portuguese 🇵🇹",
-    "nl": "Dutch 🇳🇱",
-    "ja": "Japanese 🇯🇵",
-    "ko": "Korean 🇰🇷",
-    "zh": "Chinese 🇨🇳"
+    "en-US": "English 🇬🇧 ",
+    "nl": "Dutch 🇳🇱 "
 }
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -62,42 +51,68 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Please select a language first using the /start command.")
         return
 
+    file = None
+    mime_type = None
+
     if update.message.voice:
-        file_id = update.message.voice.file_id
+        file = await context.bot.get_file(update.message.voice.file_id)
+        mime_type = "audio/ogg"
     elif update.message.audio:
-        file_id = update.message.audio.file_id
+        file = await context.bot.get_file(update.message.audio.file_id)
+        mime_type = update.message.audio.mime_type
     elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('audio/'):
-        file_id = update.message.document.file_id
+        file = await context.bot.get_file(update.message.document.file_id)
+        mime_type = update.message.document.mime_type
     else:
         await update.message.reply_text("Please send a voice message or an audio file.")
         return
 
-    file = await context.bot.get_file(file_id)
+    if not file:
+        await update.message.reply_text("Sorry, I couldn't process that file. Please try again.")
+        return
+
     file_url = file.file_path
 
-    options = {
+    headers = {
+        "Authorization": f"Token {config.DEEPGRAM_API_KEY}",
+        "Content-Type": "application/json"
+    }
+
+    payload = {
+        "url": file_url
+    }
+
+    params = {
+        "smart_format": "true",
         "model": "nova-2",
-        "smart_format": True,
-        "language": context.user_data["language"]
+        "language": context.user_data["language"],
+        "detect_language": "true"
     }
 
     try:
-        async with httpx.AsyncClient() as client:
-            response = await client.get(file_url)
-            audio_data = response.content
+        async with aiohttp.ClientSession() as session:
+            async with session.post(
+                "https://api.deepgram.com/v1/listen",
+                headers=headers,
+                params=params,
+                json=payload
+            ) as response:
+                if response.status == 200:
+                    result = await response.json()
+                    transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
+                    detected_language = result['results']['channels'][0]['detected_language']
 
-            transcription_response = await deepgram.transcription.prerecorded(
-                buffer=audio_data,
-                mimetype='audio/mpeg',  # You may need to adjust the MIME type based on your audio file format
-                **options
-            )
-            transcript = transcription_response['results']['channels'][0]['alternatives'][0]['transcript']
+                    response_text = f"Detected language: {detected_language}\n\nTranscript:\n{transcript}"
 
-            if len(transcript) > 4096:  # Telegram message length limit
-                with io.StringIO(transcript) as transcript_file:
-                    await update.message.reply_document(document=transcript_file, filename="transcription.txt")
-            else:
-                await update.message.reply_text(transcript)
+                    if len(response_text) > 4096:  # Telegram message length limit
+                        with io.StringIO(response_text) as transcript_file:
+                            await update.message.reply_document(document=transcript_file, filename="transcription.txt")
+                    else:
+                        await update.message.reply_text(response_text)
+                else:
+                    error_msg = await response.text()
+                    logger.error(f"Deepgram API error: {error_msg}")
+                    await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")

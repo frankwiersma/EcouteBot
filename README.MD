@@ -1,53 +1,109 @@
-# Telegram Bot Project
+# 🎙️ EcouteBot 🤖
 
-This project implements a Telegram bot using Python. The bot likely has audio processing capabilities, as it uses the Deepgram API.
+EcouteBot is a Telegram bot that transcribes voice messages and audio files using the Deepgram API.
 
-## Setup
+## 🌟 Features
 
-1. Clone the repository
-2. Install the required dependencies (you may want to use a virtual environment)
-3. Create a `.env` file in the root directory with the following content:
+- 🗣️ Transcribes voice messages and audio files
+- 🌐 Supports multiple languages (currently English 🇬🇧 and Dutch 🇳🇱)
+- 🔍 Detects the language of the audio
+- 📄 Outputs long transcriptions as text files
+
+## 🛠️ Setup
+
+### Prerequisites
+
+- Docker 🐳
+- Docker Compose 🐙
+
+### Installation
+
+1. Clone this repository:
+   ```
+   git clone https://github.com/yourusername/EcouteBot.git
+   cd EcouteBot
+   ```
+
+2. Create a `.env` file in the root directory:
+   ```
+   TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
+   DEEPGRAM_API_KEY=your_deepgram_api_key_here
+   ```
+
+3. Build and start the Docker container:
+   ```
+   docker-compose up -d
+   ```
+
+## 🚀 Usage
+
+1. Start a chat with your bot on Telegram
+2. Use the `/start` command to begin
+3. Select your preferred language
+4. Send a voice message or audio file
+5. Receive the transcription!
+
+## 🔄 Running on Startup
+
+To run EcouteBot on system startup:
+
+1. Create a systemd service file:
+   ```
+   sudo nano /etc/systemd/system/ecoutebot.service
+   ```
+
+2. Add the following content (replace `/path/to/EcouteBot` with your actual path):
+   ```
+   [Unit]
+   Description=EcouteBot Docker Compose Application
+   Requires=docker.service
+   After=docker.service
+
+   [Service]
+   Type=oneshot
+   RemainAfterExit=yes
+   WorkingDirectory=/path/to/EcouteBot
+   ExecStart=/usr/local/bin/docker-compose up -d
+   ExecStop=/usr/local/bin/docker-compose down
+   TimeoutStartSec=0
+
+   [Install]
+   WantedBy=multi-user.target
+   ```
+
+3. Enable and start the service:
+   ```
+   sudo systemctl enable ecoutebot.service
+   sudo systemctl start ecoutebot.service
+   ```
+
+## 📁 Project Structure
 
 ```
-TELEGRAM_BOT_TOKEN=your_telegram_bot_token_here
-DEEPGRAM_API_KEY=your_deepgram_api_key_here
+EcouteBot/
+│
+├── app/
+│   ├── bot.py
+│   ├── config.py
+│   └── requirements.txt
+│
+├── .env
+├── Dockerfile
+├── docker-compose.yml
+└── README.md
 ```
 
-4. Replace `your_telegram_bot_token_here` and `your_deepgram_api_key_here` with your actual API keys.
+## 🛑 Stopping the Bot
 
-## Configuration
-
-The project uses a `config.py` file to load environment variables:
-
-```python:config.py
-startLine: 1
-endLine: 7
+To stop the bot:
+```
+docker-compose down
 ```
 
-This configuration file loads the environment variables from the `.env` file and makes them available for use in the project.
+## 🔒 Security Note
 
-## Dependencies
+Keep your `.env` file secure and never share your API keys publicly!
 
-The project uses several dependencies, including:
+## 📜 License
 
-- python-dotenv (for loading environment variables)
-- telegram (for the Telegram Bot API)
-- deepgram (for audio processing)
-
-A full list of dependencies can be found in the `requirements.txt` file (not provided in the given code snippets).
-
-## Usage
-
-To run the bot, execute the main Python script (not provided in the given code snippets).
-
-## Features
-
-The exact features of the bot are not clear from the provided code snippets. However, given the use of Deepgram API, it's likely that the bot has some audio processing or speech-to-text capabilities.
-
-## Contributing
-
-Contributions to this project are welcome. Please ensure you follow the coding standards and submit pull requests for any new features or bug fixes.
-
-## License
-
-The license information for this project is not provided in the given code snippets. Please add appropriate license information here.
+This project is licensed under the MIT License.
