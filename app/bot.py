@@ -3,12 +3,16 @@ import aiohttp
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from deepgram import DeepgramClient, PrerecordedOptions
 import config
 import io
 
 # Set up logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+# Initialize Deepgram client
+deepgram = DeepgramClient(config.DEEPGRAM_API_KEY)
 
 # Language options
 LANGUAGES = {
@@ -27,7 +31,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
     user = update.effective_user
     await update.message.reply_html(
-        f"Hi {user.mention_html()}! I can transcribe voice messages. Send me a voice message or audio file to get started."
+        f"Hi {user.mention_html()}! I can transcribe voice messages with improved formatting and speaker diarization. Send me a voice message or audio file to get started."
     )
     await show_language_options(update, context)
 
@@ -91,46 +95,36 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     file_url = file.file_path
 
-    headers = {
-        "Authorization": f"Token {config.DEEPGRAM_API_KEY}",
-        "Content-Type": "application/json"
-    }
-
-    payload = {
-        "url": file_url
-    }
-
-    params = {
-        "smart_format": "true",
-        "model": "nova-2",
-        "language": context.user_data["language"],
-        "detect_language": "true"
-    }
+    options = PrerecordedOptions(
+        model="nova-2",
+        language=context.user_data["language"],
+        smart_format=True,
+        punctuate=True,
+        paragraphs=True,
+        utterances=True,
+        diarize=True,
+    )
 
     try:
-        async with aiohttp.ClientSession() as session:
-            async with session.post(
-                "https://api.deepgram.com/v1/listen",
-                headers=headers,
-                params=params,
-                json=payload
-            ) as response:
-                if response.status == 200:
-                    result = await response.json()
-                    transcript = result['results']['channels'][0]['alternatives'][0]['transcript']
-                    detected_language = result['results']['channels'][0]['detected_language']
+        response = await deepgram.listen.prerecorded.v("1").transcribe_url({"url": file_url}, options)
+        result = response.results
+        transcript = result['channels'][0]['alternatives'][0]['transcript']
+        detected_language = result['channels'][0]['detected_language']
 
-                    response_text = f"Detected language: {detected_language}\n\nTranscript:\n{transcript}"
+        # Format the transcript with speaker diarization
+        formatted_transcript = ""
+        for paragraph in result['channels'][0]['alternatives'][0]['paragraphs']['paragraphs']:
+            speaker = paragraph['speaker']
+            text = paragraph['text']
+            formatted_transcript += f"Speaker {speaker}: {text}\n\n"
 
-                    if len(response_text) > 4096:  # Telegram message length limit
-                        with io.StringIO(response_text) as transcript_file:
-                            await update.message.reply_document(document=transcript_file, filename="transcription.txt")
-                    else:
-                        await update.message.reply_text(response_text)
-                else:
-                    error_msg = await response.text()
-                    logger.error(f"Deepgram API error: {error_msg}")
-                    await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
+        response_text = f"Detected language: {detected_language}\n\nTranscript:\n{formatted_transcript}"
+
+        if len(response_text) > 4096:  # Telegram message length limit
+            with io.StringIO(response_text) as transcript_file:
+                await update.message.reply_document(document=transcript_file, filename="transcription.txt")
+        else:
+            await update.message.reply_text(response_text)
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
         await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
