@@ -3,7 +3,7 @@ import aiohttp
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from deepgram import DeepgramClient, PrerecordedOptions
+from deepgram import Deepgram
 import config
 import io
 
@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Initialize Deepgram client
-deepgram = DeepgramClient(config.DEEPGRAM_API_KEY)
+deepgram = Deepgram(config.DEEPGRAM_API_KEY)
 
 # Language options
 LANGUAGES = {
@@ -95,34 +95,40 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     file_url = file.file_path
 
-    options = PrerecordedOptions(
-        model="nova-2",
-        language=context.user_data["language"],
-        smart_format=True,
-        punctuate=True,
-        paragraphs=True,
-        utterances=True,
-        diarize=True,
-    )
+    source = {'url': file_url}
+
+    options = {
+        'model': 'nova-2',
+        'language': context.user_data['language'],
+        'smart_format': True,
+        'punctuate': True,
+        'paragraphs': True,
+        'utterances': True,
+        'diarize': True,
+    }
 
     try:
-        response = await deepgram.listen.prerecorded.v("beta").transcribe_url(
-            {"url": file_url},
+        response = await deepgram.transcription.prerecorded(
+            source,
             options
         )
-        result = response
-        transcript = result.results.channels[0].alternatives[0].transcript
-        detected_language = result.results.channels[0].detected_language
+
+        # Extract the transcript and detected language
+        transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
+        detected_language = response['metadata']['detected_language']
 
         # Format the transcript with speaker diarization
         formatted_transcript = ""
-        for paragraph in result.results.channels[0].alternatives[0].paragraphs.paragraphs:
-            speaker = paragraph.speaker
-            text = paragraph.text
+        paragraphs = response['results']['channels'][0]['alternatives'][0]['paragraphs']['paragraphs']
+        for paragraph in paragraphs:
+            speaker = paragraph['speaker']
+            text = paragraph['text']
             formatted_transcript += f"Speaker {speaker}: {text}\n\n"
 
         response_text = f"Detected language: {detected_language}\n\nTranscript:\n{formatted_transcript}"
 
+
+        # Send the response to the user
         if len(response_text) > 4096:  # Telegram message length limit
             with io.StringIO(response_text) as transcript_file:
                 await update.message.reply_document(document=transcript_file, filename="transcription.txt")
