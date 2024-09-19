@@ -105,32 +105,33 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         diarize=True,
     )
 
-try:
-    response = await deepgram.listen.prerecorded.v("beta").transcribe_url(
-        {"url": file_url},
-        options
-    )
-    result = response
-    transcript = result.results.channels[0].alternatives[0].transcript
-    detected_language = result.results.channels[0].detected_language
+    try:
+        response = await deepgram.listen.prerecorded.v("beta").transcribe_url(
+            {"url": file_url},
+            options
+        )
+        result = response
+        transcript = result.results.channels[0].alternatives[0].transcript
+        detected_language = result.results.channels[0].detected_language
 
-    # Format the transcript with speaker diarization
-    formatted_transcript = ""
-    for paragraph in result.results.channels[0].alternatives[0].paragraphs.paragraphs:
-        speaker = paragraph.speaker
-        text = paragraph.text
-        formatted_transcript += f"Speaker {speaker}: {text}\n\n"
+        # Format the transcript with speaker diarization
+        formatted_transcript = ""
+        for paragraph in result.results.channels[0].alternatives[0].paragraphs.paragraphs:
+            speaker = paragraph.speaker
+            text = paragraph.text
+            formatted_transcript += f"Speaker {speaker}: {text}\n\n"
 
-    response_text = f"Detected language: {detected_language}\n\nTranscript:\n{formatted_transcript}"
+        response_text = f"Detected language: {detected_language}\n\nTranscript:\n{formatted_transcript}"
 
-    if len(response_text) > 4096:  # Telegram message length limit
-        with io.StringIO(response_text) as transcript_file:
-            await update.message.reply_document(document=transcript_file, filename="transcription.txt")
-    else:
-        await update.message.reply_text(response_text)
-except Exception as e:
-    logger.error(f"Error during transcription: {str(e)}")
-    await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
+        if len(response_text) > 4096:  # Telegram message length limit
+            with io.StringIO(response_text) as transcript_file:
+                await update.message.reply_document(document=transcript_file, filename="transcription.txt")
+        else:
+            await update.message.reply_text(response_text)
+    except Exception as e:
+        logger.error(f"Error during transcription: {str(e)}")
+        await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
+
 
 def main() -> None:
     """Start the bot."""
