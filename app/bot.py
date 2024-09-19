@@ -4,7 +4,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
 import config
 import io
-from deepgram import Deepgram
+from deepgram import DeepgramClient, DeepgramClientOptions
 import asyncio
 
 # Set up logging
@@ -20,8 +20,8 @@ LANGUAGES = {
 # Default language
 DEFAULT_LANGUAGE = "nl"
 
-# Initialize the Deepgram SDK
-deepgram = Deepgram(config.DEEPGRAM_API_KEY)
+# Initialize the Deepgram client
+deepgram = DeepgramClient(config.DEEPGRAM_API_KEY)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -105,14 +105,14 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         }
 
         # Request transcription
-        response = await deepgram.transcription.prerecorded(
-            { "url": file_url },
+        response = await deepgram.transcription.prerecorded.v("1").transcribe_url(
+            {"url": file_url},
             options
         )
 
         # Process the response
-        transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
-        detected_language = response['results']['channels'][0]['detected_language']
+        transcript = response.results.channels[0].alternatives[0].transcript
+        detected_language = response.results.channels[0].detected_language
 
         response_text = f"Detected language: {detected_language}\n\nTranscript:\n{transcript}"
 
