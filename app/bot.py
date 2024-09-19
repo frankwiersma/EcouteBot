@@ -1,14 +1,22 @@
 import logging
-import aiohttp
-import json
+import asyncio
+import io
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    CallbackQueryHandler,
+    ContextTypes,
+    filters,
+)
 from deepgram import Deepgram
 import config
-import io
 
 # Set up logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
 logger = logging.getLogger(__name__)
 
 # Initialize Deepgram client
@@ -17,11 +25,12 @@ deepgram = Deepgram(config.DEEPGRAM_API_KEY)
 # Language options
 LANGUAGES = {
     "en-US": "English 🇬🇧 ",
-    "nl": "Dutch 🇳🇱 "
+    "nl": "Dutch 🇳🇱 ",
 }
 
 # Default language
 DEFAULT_LANGUAGE = "nl"
+
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Send a message when the command /start is issued."""
@@ -35,19 +44,29 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     )
     await show_language_options(update, context)
 
-async def show_language_options(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+
+async def show_language_options(
+    update: Update, context: ContextTypes.DEFAULT_TYPE
+) -> None:
     """Show language selection options."""
     if str(update.effective_user.id) != config.ALLOWED_USER_ID:
         return
 
     keyboard = [
-        [InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}") 
-         for lang_code, lang_name in list(LANGUAGES.items())[:5]],
-        [InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}") 
-         for lang_code, lang_name in list(LANGUAGES.items())[5:]]
+        [
+            InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}")
+            for lang_code, lang_name in list(LANGUAGES.items())[:5]
+        ],
+        [
+            InlineKeyboardButton(lang_name, callback_data=f"lang_{lang_code}")
+            for lang_code, lang_name in list(LANGUAGES.items())[5:]
+        ],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text("Please select the language of the audio:", reply_markup=reply_markup)
+    await update.message.reply_text(
+        "Please select the language of the audio:", reply_markup=reply_markup
+    )
+
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle button presses."""
@@ -61,7 +80,10 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if query.data.startswith("lang_"):
         lang = query.data.split("_")[1]
         context.user_data["language"] = lang
-        await query.edit_message_text(f"Language set to {LANGUAGES[lang]}. You can now send me a voice message or audio file.")
+        await query.edit_message_text(
+            f"Language set to {LANGUAGES[lang]}. You can now send me a voice message or audio file."
+        )
+
 
 async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Handle incoming voice messages and audio files."""
@@ -71,7 +93,9 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
     if "language" not in context.user_data:
         context.user_data["language"] = DEFAULT_LANGUAGE
-        await update.message.reply_text(f"Using default language: {LANGUAGES[DEFAULT_LANGUAGE]}. You can change it using the /start command.")
+        await update.message.reply_text(
+            f"Using default language: {LANGUAGES[DEFAULT_LANGUAGE]}. You can change it using the /start command."
+        )
 
     file = None
     mime_type = None
@@ -82,7 +106,11 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     elif update.message.audio:
         file = await context.bot.get_file(update.message.audio.file_id)
         mime_type = update.message.audio.mime_type
-    elif update.message.document and update.message.document.mime_type and update.message.document.mime_type.startswith('audio/'):
+    elif (
+        update.message.document
+        and update.message.document.mime_type
+        and update.message.document.mime_type.startswith("audio/")
+    ):
         file = await context.bot.get_file(update.message.document.file_id)
         mime_type = update.message.document.mime_type
     else:
@@ -90,53 +118,62 @@ async def handle_voice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         return
 
     if not file:
-        await update.message.reply_text("Sorry, I couldn't process that file. Please try again.")
+        await update.message.reply_text(
+            "Sorry, I couldn't process that file. Please try again."
+        )
         return
 
-    file_url = file.file_path
+    # Download the file as BytesIO
+    audio_file = await file.download_as_bytes()
 
-    source = {'url': file_url}
+    source = {
+        "buffer": audio_file,
+        "mimetype": mime_type,
+    }
 
     options = {
-        'model': 'nova-2',
-        'language': context.user_data['language'],
-        'smart_format': True,
-        'punctuate': True,
-        'paragraphs': True,
-        'utterances': True,
-        'diarize': True,
+        "model": "nova-2",
+        "language": context.user_data["language"],
+        "smart_format": True,
+        "punctuate": True,
+        "paragraphs": True,
+        "utterances": True,
+        "diarize": True,
     }
 
     try:
-        response = await deepgram.transcription.prerecorded(
-            source,
-            options
-        )
+        response = await deepgram.transcription.prerecorded(source, options)
 
         # Extract the transcript and detected language
-        transcript = response['results']['channels'][0]['alternatives'][0]['transcript']
-        detected_language = response['metadata']['detected_language']
+        transcript = response["results"]["channels"][0]["alternatives"][0]["transcript"]
+        detected_language = response["metadata"]["detected_language"]
 
         # Format the transcript with speaker diarization
         formatted_transcript = ""
-        paragraphs = response['results']['channels'][0]['alternatives'][0]['paragraphs']['paragraphs']
+        paragraphs = response["results"]["channels"][0]["alternatives"][0]["paragraphs"][
+            "paragraphs"
+        ]
         for paragraph in paragraphs:
-            speaker = paragraph['speaker']
-            text = paragraph['text']
+            speaker = paragraph["speaker"]
+            text = paragraph["text"]
             formatted_transcript += f"Speaker {speaker}: {text}\n\n"
 
         response_text = f"Detected language: {detected_language}\n\nTranscript:\n{formatted_transcript}"
 
-
         # Send the response to the user
         if len(response_text) > 4096:  # Telegram message length limit
             with io.StringIO(response_text) as transcript_file:
-                await update.message.reply_document(document=transcript_file, filename="transcription.txt")
+                await update.message.reply_document(
+                    document=transcript_file, filename="transcription.txt"
+                )
         else:
             await update.message.reply_text(response_text)
+
     except Exception as e:
         logger.error(f"Error during transcription: {str(e)}")
-        await update.message.reply_text("Sorry, there was an error processing your audio. Please try again.")
+        await update.message.reply_text(
+            "Sorry, there was an error processing your audio. Please try again."
+        )
 
 
 def main() -> None:
@@ -145,9 +182,14 @@ def main() -> None:
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button))
-    application.add_handler(MessageHandler(filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice))
+    application.add_handler(
+        MessageHandler(
+            filters.VOICE | filters.AUDIO | filters.Document.AUDIO, handle_voice
+        )
+    )
 
     application.run_polling()
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()
