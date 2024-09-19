@@ -3,7 +3,7 @@ import aiohttp
 import json
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, CallbackQueryHandler, ContextTypes, filters
-from deepgram import DeepgramClient, PrerecordedOptions
+from deepgram import Deepgram
 import config
 import io
 
@@ -12,7 +12,7 @@ logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s
 logger = logging.getLogger(__name__)
 
 # Initialize Deepgram client
-deepgram = DeepgramClient(config.DEEPGRAM_API_KEY)
+deepgram = Deepgram(config.DEEPGRAM_API_KEY)
 
 # Language options
 LANGUAGES = {
